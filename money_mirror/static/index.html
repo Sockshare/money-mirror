@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Money Mirror — see where your money goes</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🪞</text></svg>">
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+
+<header class="topbar">
+  <a class="brand" href="#" id="brandLink"><span class="brand-icon">🪞</span><span>Money Mirror</span></a>
+  <nav class="tabs" id="tabs" hidden>
+    <button class="tab active" data-tab="overview">Overview</button>
+    <button class="tab" data-tab="subs">Subscriptions</button>
+    <button class="tab" data-tab="alerts">Alerts <span class="badge" id="alertCount" hidden></span></button>
+    <button class="tab" data-tab="txns">Transactions</button>
+    <button class="tab" data-tab="ask">Ask</button>
+  </nav>
+  <div class="topbar-right">
+    <button class="pill" id="enginePill" title="Which AI is being used"><span class="dot" id="engineDot"></span><span id="engineText">Checking…</span></button>
+    <button class="icon-btn" id="importBtn" title="Add another bank file">➕ <span class="hide-sm">Add file</span></button>
+    <button class="icon-btn" id="helpBtn" title="How to use this">❔ <span class="hide-sm">Help</span></button>
+    <button class="icon-btn" id="settingsBtn" title="Settings">⚙️ <span class="hide-sm">Settings</span></button>
+  </div>
+</header>
+
+<main id="app">
+
+  <!-- ============ FIRST RUN ============ -->
+  <section class="screen" id="screen-setup" hidden>
+    <div class="setup-card">
+      <h1>Welcome! 👋</h1>
+      <p class="lead">Money Mirror shows where your money goes — forgotten subscriptions, price increases, double charges, and what you really spend each month. It reads the CSV file your bank already lets you download. <strong>No bank login. Nothing uploaded anywhere.</strong></p>
+      <h2>One quick question: do you want AI help?</h2>
+      <p class="muted">AI is optional here. It only helps name unusual merchants and understand tricky questions. <b>It never sees your amounts or dates.</b></p>
+      <div class="choice-grid">
+        <button class="choice" data-choice="ollama">
+          <div class="choice-emoji">💻</div>
+          <div class="choice-title">AI on my computer</div>
+          <div class="choice-desc">Free and private. Uses a program called <b>Ollama</b>.</div>
+          <div class="choice-status" id="ollamaStatus">Looking for Ollama…</div>
+        </button>
+        <button class="choice" data-choice="cloud">
+          <div class="choice-emoji">☁️</div>
+          <div class="choice-title">Cloud AI key</div>
+          <div class="choice-desc">OpenAI or Gemini. Only merchant names and your questions are sent.</div>
+          <div class="choice-status muted">You'll paste the key next</div>
+        </button>
+        <button class="choice" data-choice="offline">
+          <div class="choice-emoji">🔒</div>
+          <div class="choice-title">No AI</div>
+          <div class="choice-desc">Everything works with built-in rules. Recommended to start.</div>
+          <div class="choice-status ok">Always works</div>
+        </button>
+      </div>
+      <p class="muted small">You can change this any time in ⚙️ Settings.</p>
+    </div>
+  </section>
+
+  <!-- ============ IMPORT ============ -->
+  <section class="screen" id="screen-import" hidden>
+    <div class="hero">
+      <h1 id="importTitle">Add your bank file</h1>
+      <p class="lead">Log in to your bank's website, find <b>Download</b> or <b>Export</b> on your transactions page, and choose <b>CSV</b>. Then drop that file here.</p>
+    </div>
+    <div class="dropzone" id="dropzone" tabindex="0" role="button" aria-label="Upload a CSV">
+      <div class="drop-icon">📄</div>
+      <div class="drop-title">Drag your CSV here, or <span class="link">click to choose it</span></div>
+      <div class="drop-sub">Works with exports from almost any bank or credit card. You can add several files.</div>
+      <input type="file" id="fileInput" hidden accept=".csv,.txt,.tsv" multiple>
+    </div>
+    <div class="or-row"><span>or</span></div>
+    <div class="center">
+      <button class="btn big" id="sampleBtn">👀 Try it with example data</button>
+      <p class="muted small">Loads 7 months of made-up transactions so you can click around.</p>
+    </div>
+    <details class="howto">
+      <summary>Where do I find the CSV at my bank?</summary>
+      <ul>
+        <li><b>Most banks:</b> Accounts → pick the account → Transactions or Activity → "Download" / "Export" → choose CSV (sometimes called "Excel/Spreadsheet" or "Comma separated").</li>
+        <li><b>Credit cards:</b> Statements & Activity → "Download transactions" → CSV. Pick the longest date range they allow (often 12–24 months).</li>
+        <li><b>Can't find it?</b> Search the help pages for "download transactions CSV <i>your bank name</i>".</li>
+      </ul>
+    </details>
+    <div id="importBackRow" hidden class="center"><button class="btn ghost" id="importBack">← Back to my dashboard</button></div>
+    <p class="privacy-note">🔒 <b>Privacy:</b> <span id="privacyText">Your transactions stay on this computer.</span></p>
+  </section>
+
+  <!-- ============ IMPORT RESULT ============ -->
+  <section class="screen" id="screen-imported" hidden>
+    <div class="working-card wide">
+      <div class="big-emoji">✅</div>
+      <h2 id="impHeadline">Imported!</h2>
+      <p class="muted" id="impSub"></p>
+      <div class="notes" id="impWarnings" hidden></div>
+      <div class="preview-table" id="impPreview"></div>
+      <div id="impUnknown" hidden class="unknown-box">
+        <b id="impUnknownTitle"></b>
+        <p class="muted small">You can fix these in the Transactions tab (one click teaches the app). <span id="impAiOffer"></span></p>
+        <div class="row-gap"><button class="btn" id="impAiBtn" hidden>✨ Let the AI name them</button><span id="impAiOut" class="small"></span></div>
+      </div>
+      <div class="row-gap center">
+        <button class="btn primary big" id="impGo">Show my dashboard →</button>
+        <button class="btn" id="impMore">Add another file</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ DASHBOARD ============ -->
+  <section class="screen" id="screen-dash" hidden>
+    <div class="asof muted small" id="asOf"></div>
+
+    <!-- Overview -->
+    <div class="pane" id="pane-overview">
+      <div class="stat-row">
+        <div class="stat"><div class="stat-label">This month so far</div><div class="stat-value" id="sThis">—</div><div class="stat-sub" id="sThisSub"></div></div>
+        <div class="stat"><div class="stat-label">Last month</div><div class="stat-value" id="sLast">—</div><div class="stat-sub" id="sLastSub"></div></div>
+        <div class="stat"><div class="stat-label">Typical month</div><div class="stat-value" id="sAvg">—</div><div class="stat-sub" id="sAvgSub"></div></div>
+        <div class="stat"><div class="stat-label">Recurring bills & subs</div><div class="stat-value" id="sSubs">—</div><div class="stat-sub" id="sSubsSub"></div></div>
+      </div>
+      <div class="two-col">
+        <div class="card"><h2>📊 Spending by month</h2><div class="chart" id="chartMonths"></div><p class="muted small">Bars are spending; the line is money in. Transfers and card payments are left out so nothing is counted twice.</p></div>
+        <div class="card"><h2>🥧 Where it goes</h2><div class="chart" id="chartCats"></div></div>
+      </div>
+      <div class="two-col">
+        <div class="card"><h2>📈 Biggest changes vs last month</h2><div id="catChange"></div></div>
+        <div class="card"><h2>🏪 Top places</h2><div id="topMerchants"></div></div>
+      </div>
+      <div class="card tip" id="plainSummary"></div>
+    </div>
+
+    <!-- Subscriptions -->
+    <div class="pane" id="pane-subs" hidden>
+      <div class="card">
+        <h2>🔁 Things that charge you regularly</h2>
+        <p class="muted">Found by spotting the same place charging a similar amount on a regular rhythm. Click a row to see the charges.</p>
+        <div class="stat-row small-stats"><div class="stat"><div class="stat-label">Per month</div><div class="stat-value" id="subMonthly">—</div></div><div class="stat"><div class="stat-label">Per year</div><div class="stat-value" id="subYearly">—</div></div><div class="stat"><div class="stat-label">Active</div><div class="stat-value" id="subCount">—</div></div></div>
+        <div id="subList"></div>
+      </div>
+    </div>
+
+    <!-- Alerts -->
+    <div class="pane" id="pane-alerts" hidden>
+      <div class="card"><h2>⚠️ Things worth a look</h2><p class="muted">Double charges, price increases, fees, and unusually big purchases. Click one to see the transactions.</p><div id="alertList"></div></div>
+    </div>
+
+    <!-- Transactions -->
+    <div class="pane" id="pane-txns" hidden>
+      <div class="card">
+        <div class="filters">
+          <input id="fSearch" placeholder="Search (e.g. starbucks, netflix, fee)…">
+          <select id="fCategory"><option value="">All categories</option></select>
+          <select id="fMonth"><option value="">All months</option></select>
+          <button class="btn ghost" id="fClear">Clear</button>
+          <a class="btn" href="/api/export.csv" download>⬇️ Export CSV</a>
+        </div>
+        <p class="muted small">Wrong category? Change it in the dropdown — the app remembers it for that place next time.</p>
+        <div class="txn-table" id="txnTable"></div>
+        <div class="center"><button class="btn" id="txnMore" hidden>Show more</button></div>
+      </div>
+    </div>
+
+    <!-- Ask -->
+    <div class="pane" id="pane-ask" hidden>
+      <div class="card">
+        <h2>💬 Ask about your spending</h2>
+        <div class="ask-row">
+          <input id="askInput" placeholder="How much did I spend on eating out since March?">
+          <button class="btn primary" id="askBtn">Ask</button>
+        </div>
+        <div class="chips">
+          <button class="chip" data-q="How much do I spend on groceries a month?">Groceries per month</button>
+          <button class="chip" data-q="How much did I spend on eating out last month?">Eating out last month</button>
+          <button class="chip" data-q="How many times did I go to Starbucks?">Coffee visits</button>
+          <button class="chip" data-q="What was my biggest shopping purchase?">Biggest purchase</button>
+          <button class="chip" data-q="How much did I earn this year?">Income this year</button>
+        </div>
+        <p class="muted small" id="askPrivacy"></p>
+        <div id="askThread"></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- ============ MODALS ============ -->
+<div class="modal-back" id="modalBack" hidden></div>
+
+<div class="modal" id="modal-txns" hidden>
+  <div class="modal-head"><h2 id="mTxnTitle">Transactions</h2><button class="x" data-close>✕</button></div>
+  <div class="modal-body"><p class="muted" id="mTxnSub"></p><div class="txn-table" id="mTxnTable"></div></div>
+</div>
+
+<div class="modal" id="modal-settings" hidden>
+  <div class="modal-head"><h2>⚙️ Settings</h2><button class="x" data-close>✕</button></div>
+  <div class="modal-body">
+    <h3>AI help (optional)</h3>
+    <p class="muted small">Used only to name unusual merchants and understand tricky questions. Your amounts and dates are never sent.</p>
+    <div class="radio-list">
+      <label class="radio"><input type="radio" name="prov" value="ollama"><div><b>💻 On my computer (Ollama)</b><div class="muted small">Free, private. <span id="setOllamaInfo"></span></div></div></label>
+      <label class="radio"><input type="radio" name="prov" value="openai"><div><b>☁️ OpenAI (or compatible)</b><div class="muted small">Needs an API key.</div></div></label>
+      <label class="radio"><input type="radio" name="prov" value="gemini"><div><b>☁️ Google Gemini</b><div class="muted small">Needs a free Gemini API key.</div></div></label>
+      <label class="radio"><input type="radio" name="prov" value="offline"><div><b>🔒 No AI</b><div class="muted small">Built-in rules only. Instant, always works.</div></div></label>
+    </div>
+    <div class="prov-panel" data-prov="ollama">
+      <div class="form-row"><label>Model</label><select id="setOllamaModel"></select></div>
+      <div class="form-row"><label>Ollama address <span class="muted">(leave as is unless you know why)</span></label><input id="setOllamaHost" placeholder="http://127.0.0.1:11434"></div>
+      <div class="help-box" id="ollamaHelp" hidden><b>Don't have Ollama yet?</b> It's free. In a terminal run:<pre>curl -fsSL https://ollama.com/install.sh | sh
+ollama pull llama3.2:3b</pre>Then click <b>Test</b> below.</div>
+    </div>
+    <div class="prov-panel" data-prov="openai">
+      <div class="form-row"><label>API key</label><input id="setOpenaiKey" type="password" placeholder="sk-…" autocomplete="off"><button class="btn small ghost" data-clear-key="openai_api_key" type="button">Remove saved key</button></div>
+      <div class="form-row"><label>Model</label><input id="setOpenaiModel" placeholder="gpt-4o-mini"></div>
+      <div class="form-row"><label>Server address <span class="muted">(change only for Groq / LM Studio etc.)</span></label><input id="setOpenaiUrl" placeholder="https://api.openai.com/v1"></div>
+      <p class="muted small">Get a key at platform.openai.com → API keys. It starts with "sk-".</p>
+    </div>
+    <div class="prov-panel" data-prov="gemini">
+      <div class="form-row"><label>Gemini API key</label><input id="setGeminiKey" type="password" placeholder="AIza…" autocomplete="off"><button class="btn small ghost" data-clear-key="gemini_api_key" type="button">Remove saved key</button></div>
+      <div class="form-row"><label>Model</label><input id="setGeminiModel" placeholder="gemini-2.0-flash"></div>
+      <p class="muted small">Get a free key at aistudio.google.com → "Get API key".</p>
+    </div>
+    <div class="row-gap"><button class="btn" id="setTest">🔌 Test</button><span id="setTestOut" class="small"></span></div>
+
+    <h3>Display</h3>
+    <div class="form-row"><label>Currency symbol <span class="muted">(just for display — the app doesn't convert)</span></label><input id="setCurrency" placeholder="$" maxlength="4" style="max-width:120px"></div>
+    <p class="muted small" id="setEnvNote" hidden></p>
+    <h3>Your data</h3>
+    <p class="muted small" id="setDataInfo"></p>
+    <div class="row-gap">
+      <button class="btn danger-ghost small" id="setClearData">🗑️ Delete all transactions</button>
+      <button class="btn danger-ghost small" id="setClearAll">🗑️ Delete everything (incl. learned categories)</button>
+    </div>
+    <div class="modal-foot"><button class="btn primary big" id="setSave">Save settings</button></div>
+  </div>
+</div>
+
+<div class="modal" id="modal-help" hidden>
+  <div class="modal-head"><h2>❔ How to use Money Mirror</h2><button class="x" data-close>✕</button></div>
+  <div class="modal-body help">
+    <ol>
+      <li><b>Download a CSV from your bank.</b> On your bank's website: Transactions → Download/Export → CSV. Pick the longest date range you can.</li>
+      <li><b>Drop it into Money Mirror.</b> Add as many files as you like (checking, credit cards). Re-adding the same file is safe — nothing is counted twice.</li>
+      <li><b>Look at the tabs.</b> <b>Overview</b> = the big picture. <b>Subscriptions</b> = things charging you regularly. <b>Alerts</b> = double charges, price increases, fees. <b>Transactions</b> = everything, searchable. <b>Ask</b> = plain-English questions.</li>
+      <li><b>Fix a category</b> in the Transactions tab and the app remembers it.</li>
+    </ol>
+    <h3>Is it private?</h3>
+    <p>Yes. Your file is read on this computer and stored in a small database in your home folder. Nothing is uploaded. If you turn on a cloud AI, only merchant <i>names</i> and your typed questions are sent — never amounts or dates.</p>
+    <h3>Something not working?</h3>
+    <p>In a terminal, run <code>python scripts/selfcheck.py</code>. The file <code>docs/TROUBLESHOOTING.md</code> in the app folder lists every error message with its fix.</p>
+  </div>
+</div>
+
+<div class="toast" id="toast" hidden></div>
+<script src="/static/app.js"></script>
+</body>
+</html>
